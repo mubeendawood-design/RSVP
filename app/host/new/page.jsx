@@ -1,0 +1,160 @@
+"use client";
+
+import { useState } from "react";
+
+const emptyEvent = () => ({ label: "", dayLabel: "", dateNum: "", monthLabel: "", yearLabel: "", time: "", venue: "", dress: "", parking: "" });
+const emptyHousehold = () => ({ name: "", invitedCount: 4, phone: "" });
+
+export default function HostNewPage() {
+  const [coupleName, setCoupleName] = useState("");
+  const [themeKey, setThemeKey] = useState("ivory");
+  const [events, setEvents] = useState([emptyEvent()]);
+  const [households, setHouseholds] = useState([emptyHousehold()]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+
+  const updateEvent = (i, field, value) =>
+    setEvents((ev) => ev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
+  const updateHousehold = (i, field, value) =>
+    setHouseholds((hs) => hs.map((h, idx) => (idx === i ? { ...h, [field]: value } : h)));
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/host/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coupleName,
+          themeKey,
+          events: events.filter((e) => e.label.trim()),
+          households: households.filter((h) => h.name.trim()),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const label = { display: "block", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "#77705F", margin: "14px 0 4px" };
+  const input = { width: "100%", padding: "10px 12px", border: "1px solid #D8D2C5", borderRadius: 6, fontSize: 15, boxSizing: "border-box" };
+  const row = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 };
+  const card = { border: "1px solid #E5DCCC", borderRadius: 8, padding: 16, margin: "12px 0", background: "#FBF7EE" };
+  const btn = { padding: "10px 18px", borderRadius: 6, border: "1px solid #33302A", background: "#33302A", color: "#FBF7EE", fontSize: 14, cursor: "pointer" };
+  const ghostBtn = { ...btn, background: "transparent", color: "#33302A" };
+
+  if (result) {
+    return (
+      <div style={{ maxWidth: 560, margin: "40px auto", padding: "0 16px", fontFamily: "system-ui, sans-serif", color: "#33302A" }}>
+        <h1 style={{ fontSize: 22 }}>{result.wedding.couple_name} — invite links ready</h1>
+        <p style={{ color: "#77705F" }}>Copy each link and send it to that household on WhatsApp. The link is the invitation.</p>
+        {result.households.map((h) => {
+          const link = typeof window !== "undefined" ? `${window.location.origin}/i/${h.token}` : `/i/${h.token}`;
+          return (
+            <div key={h.token} style={card}>
+              <div style={{ fontWeight: 600 }}>{h.name} <span style={{ fontWeight: 400, color: "#77705F" }}>({h.invited} invited)</span></div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input readOnly value={link} style={{ ...input, background: "#fff" }} onFocus={(e) => e.target.select()} />
+                <button style={btn} onClick={() => navigator.clipboard.writeText(link)}>Copy</button>
+              </div>
+            </div>
+          );
+        })}
+        <button style={{ ...ghostBtn, marginTop: 20 }} onClick={() => { setResult(null); }}>Create another wedding</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 560, margin: "40px auto", padding: "0 16px", fontFamily: "system-ui, sans-serif", color: "#33302A" }}>
+      <h1 style={{ fontSize: 22 }}>New wedding</h1>
+      <p style={{ color: "#77705F", fontSize: 14 }}>Bare-bones skeleton: fill this in, generate links, send them out. Refine later.</p>
+
+      <label style={label}>Couple names</label>
+      <input style={input} placeholder="e.g. Zainab & Ahmed" value={coupleName} onChange={(e) => setCoupleName(e.target.value)} />
+
+      <label style={label}>Theme</label>
+      <select style={input} value={themeKey} onChange={(e) => setThemeKey(e.target.value)}>
+        <option value="ivory">Ivory Botanical</option>
+        <option value="emerald">Emerald & Gold</option>
+      </select>
+
+      <h2 style={{ fontSize: 16, marginTop: 24 }}>Events</h2>
+      {events.map((e, i) => (
+        <div key={i} style={card}>
+          <label style={label}>Event name</label>
+          <input style={input} placeholder="e.g. Nikah" value={e.label} onChange={(x) => updateEvent(i, "label", x.target.value)} />
+          <div style={row}>
+            <div>
+              <label style={label}>Day</label>
+              <input style={input} placeholder="SATURDAY" value={e.dayLabel} onChange={(x) => updateEvent(i, "dayLabel", x.target.value)} />
+            </div>
+            <div>
+              <label style={label}>Time</label>
+              <input style={input} placeholder="1:00 PM" value={e.time} onChange={(x) => updateEvent(i, "time", x.target.value)} />
+            </div>
+          </div>
+          <div style={row}>
+            <div>
+              <label style={label}>Date</label>
+              <input style={input} placeholder="12 SEP 2026" value={[e.dateNum, e.monthLabel, e.yearLabel].filter(Boolean).join(" ")}
+                onChange={(x) => {
+                  const [dateNum, monthLabel, yearLabel] = x.target.value.split(" ");
+                  updateEvent(i, "dateNum", dateNum || ""); updateEvent(i, "monthLabel", monthLabel || ""); updateEvent(i, "yearLabel", yearLabel || "");
+                }} />
+            </div>
+            <div>
+              <label style={label}>Venue</label>
+              <input style={input} placeholder="Masjid-e-Salaam, Preston" value={e.venue} onChange={(x) => updateEvent(i, "venue", x.target.value)} />
+            </div>
+          </div>
+          <label style={label}>Dress code (optional)</label>
+          <input style={input} value={e.dress} onChange={(x) => updateEvent(i, "dress", x.target.value)} />
+          <label style={label}>Parking notes (optional)</label>
+          <input style={input} value={e.parking} onChange={(x) => updateEvent(i, "parking", x.target.value)} />
+          {events.length > 1 && (
+            <button style={{ ...ghostBtn, marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setEvents((ev) => ev.filter((_, idx) => idx !== i))}>Remove event</button>
+          )}
+        </div>
+      ))}
+      <button style={ghostBtn} onClick={() => setEvents((ev) => [...ev, emptyEvent()])}>+ Add event</button>
+
+      <h2 style={{ fontSize: 16, marginTop: 24 }}>Households</h2>
+      {households.map((h, i) => (
+        <div key={i} style={card}>
+          <div style={row}>
+            <div>
+              <label style={label}>Household name</label>
+              <input style={input} placeholder="The Khan Family" value={h.name} onChange={(x) => updateHousehold(i, "name", x.target.value)} />
+            </div>
+            <div>
+              <label style={label}>Number invited</label>
+              <input type="number" min={1} style={input} value={h.invitedCount} onChange={(x) => updateHousehold(i, "invitedCount", parseInt(x.target.value) || 1)} />
+            </div>
+          </div>
+          <label style={label}>Phone (optional)</label>
+          <input style={input} value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
+          {households.length > 1 && (
+            <button style={{ ...ghostBtn, marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setHouseholds((hs) => hs.filter((_, idx) => idx !== i))}>Remove household</button>
+          )}
+        </div>
+      ))}
+      <button style={ghostBtn} onClick={() => setHouseholds((hs) => [...hs, emptyHousehold()])}>+ Add household</button>
+
+      {error && <div style={{ color: "#B0402C", marginTop: 16, fontSize: 14 }}>{error}</div>}
+
+      <div style={{ marginTop: 24 }}>
+        <button style={btn} disabled={saving || !coupleName.trim()} onClick={submit}>
+          {saving ? "Creating…" : "Create wedding & generate links"}
+        </button>
+      </div>
+    </div>
+  );
+}
