@@ -67,6 +67,13 @@ export async function POST(req) {
   // 3. Create households with unique tokens (retry on collision)
   const createdHouseholds = [];
   for (const h of households) {
+    // h.eventCounts is an array aligned with `events` (and therefore
+    // `insertedEvents`) — how many of this household are invited to each
+    // event. A household's overall "invited" number (shown on their card
+    // header) is the largest of those per-event counts.
+    const counts = h.eventCounts || [];
+    const overallInvited = counts.length ? Math.max(...counts, 1) : (h.invitedCount || 1);
+
     let token, hErr, hRow;
     for (let attempt = 0; attempt < 5; attempt++) {
       token = `${slugify(h.name)}-${randomSuffix()}`;
@@ -76,7 +83,7 @@ export async function POST(req) {
           wedding_id: wedding.id,
           token,
           name: h.name,
-          invited_count: h.invitedCount || 1,
+          invited_count: overallInvited,
           phone: h.phone || null,
         })
         .select()
@@ -88,11 +95,15 @@ export async function POST(req) {
     if (hErr) return NextResponse.json({ error: hErr.message }, { status: 500 });
     createdHouseholds.push(hRow);
 
-    // 4. Link this household to every event (bare-bones: all households see
-    // all events; per-event invitation lists can be refined later)
-    const links = insertedEvents.map((e) => ({ household_id: hRow.id, event_id: e.id }));
-    const { error: linkErr } = await supabaseAdmin.from("household_events").insert(links);
-    if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 500 });
+    // 4. Link this household only to events where they're invited (count > 0),
+    // with that event's specific headcount for this household.
+    const links = insertedEvents
+      .map((e, idx) => ({ household_id: hRow.id, event_id: e.id, invited_count: counts[idx] || 0 }))
+      .filter((l) => l.invited_count > 0);
+    if (links.length) {
+      const { error: linkErr } = await supabaseAdmin.from("household_events").insert(links);
+      if (linkErr) return NextResponse.json({ error: linkErr.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({

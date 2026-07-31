@@ -41,10 +41,12 @@ create table if not exists households (
   created_at timestamptz not null default now()
 );
 
--- which events each household is invited to (per-event invitation lists, per host flow step 4)
+-- which events each household is invited to, and how many of them
+-- (per-event invitation lists + per-event headcount, per host flow step 4)
 create table if not exists household_events (
   household_id uuid not null references households(id) on delete cascade,
   event_id uuid not null references events(id) on delete cascade,
+  invited_count int not null default 0,
   primary key (household_id, event_id)
 );
 
@@ -104,6 +106,7 @@ begin
         'dress', e.dress,
         'flow', e.flow,
         'parking', e.parking,
+        'invited', he.invited_count,
         'rsvp', r.attending_count,
         'dietary', r.dietary
       ) order by e.sort_order
@@ -182,7 +185,7 @@ begin
     '[["6:00 PM","Guests arrive, welcome drinks"],["6:45 PM","Bride''s entrance & mehndi ceremony"],["8:00 PM","Dinner served"],["9:30 PM","Music & dancing"]]'::jsonb,
     'Free parking on site. Overflow at Fishergate Centre car park, 3 min walk.', 1)
   returning id into ev_id;
-  insert into household_events (household_id, event_id) values (h_id, ev_id);
+  insert into household_events (household_id, event_id, invited_count) values (h_id, ev_id, 6);
 
   insert into events (wedding_id, slug, label, day_label, date_num, month_label, year_label, event_time, venue, maps_url, dress, flow, parking, sort_order)
   values (w_id, 'nikah', 'Nikah', 'SATURDAY', '12', 'SEP', '2026', '1:00 PM', 'Masjid-e-Salaam, Preston',
@@ -190,7 +193,7 @@ begin
     '[["1:00 PM","Guests seated — please arrive by 12:45"],["1:15 PM","Nikah ceremony"],["2:00 PM","Dua & congratulations"],["2:30 PM","Lunch served"]]'::jsonb,
     'Masjid car park is limited — please use Avenham multi-storey (5 min walk).', 2)
   returning id into ev_id;
-  insert into household_events (household_id, event_id) values (h_id, ev_id);
+  insert into household_events (household_id, event_id, invited_count) values (h_id, ev_id, 6);
 
   insert into events (wedding_id, slug, label, day_label, date_num, month_label, year_label, event_time, venue, maps_url, dress, flow, parking, sort_order)
   values (w_id, 'walima', 'Walima', 'SUNDAY', '13', 'SEP', '2026', '5:30 PM', 'The Regency Suite, Manchester',
@@ -198,5 +201,5 @@ begin
     '[["5:30 PM","Arrival & seating (seating plan applies)"],["6:15 PM","Couple''s entrance"],["7:00 PM","Dinner service"],["9:00 PM","Speeches & cake"]]'::jsonb,
     'Valet available. Additional parking announced closer to the date.', 3)
   returning id into ev_id;
-  insert into household_events (household_id, event_id) values (h_id, ev_id);
+  insert into household_events (household_id, event_id, invited_count) values (h_id, ev_id, 6);
 end $$;

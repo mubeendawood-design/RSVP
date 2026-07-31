@@ -199,7 +199,11 @@ export default function GuestInvite({ token, live }) {
   const [saveError, setSaveError] = useState(null);
 
   const answered = EVENTS_.filter((e) => rsvp[e.id] !== null).length;
-  const set = (id, n) => setRsvp((r) => ({ ...r, [id]: Math.max(0, Math.min(HOUSEHOLD_.invited, n)) }));
+  const set = (id, n) => {
+    const ev = EVENTS_.find((x) => x.id === id);
+    const cap = ev?.invited ?? HOUSEHOLD_.invited;
+    setRsvp((r) => ({ ...r, [id]: Math.max(0, Math.min(cap, n)) }));
+  };
 
   // Writes each answered event's RSVP back to Supabase (no-op in demo mode,
   // since there's no real token to save against).
@@ -434,7 +438,12 @@ export default function GuestInvite({ token, live }) {
                 <div style={{ textAlign: "center", marginTop: 4 }}>{mapsLink(e)}</div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, borderTop: `1px solid ${t.gold}33`, paddingTop: 14 }}>
-                  <span style={{ fontSize: 13, flex: 1 }}>How many of you will attend?</span>
+                  <span style={{ fontSize: 13, flex: 1 }}>
+                    How many of you will attend?
+                    {(e.invited ?? HOUSEHOLD_.invited) ? (
+                      <span style={{ color: t.sub }}> (up to {e.invited ?? HOUSEHOLD_.invited})</span>
+                    ) : null}
+                  </span>
                   <button onClick={() => set(e.id, (rsvp[e.id] ?? 1) - 1)} aria-label={`Fewer attending ${e.label}`} style={stepBtn}>−</button>
                   <span style={{ fontFamily: serif, fontSize: 24, minWidth: 26, textAlign: "center", color: rsvp[e.id] === null ? `${t.ink}55` : t.ink }}>
                     {rsvp[e.id] === null ? "–" : rsvp[e.id]}

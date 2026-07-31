@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 
-const emptyEvent = () => ({ label: "", date: "", time: "", venue: "", dress: "", parking: "" });
-const emptyHousehold = () => ({ name: "", invitedCount: 4, phone: "" });
+const makeId = () => Math.random().toString(36).slice(2, 9);
+const emptyEvent = () => ({ id: makeId(), label: "", date: "", time: "", venue: "", dress: "", parking: "" });
+const emptyHousehold = () => ({ id: makeId(), name: "", phone: "", eventCounts: {} }); // eventCounts: { [eventId]: number }
+const DEFAULT_COUNT = 4;
 
 const DAY_NAMES = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -41,21 +43,30 @@ export default function HostNewPage() {
     setEvents((ev) => ev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
   const updateHousehold = (i, field, value) =>
     setHouseholds((hs) => hs.map((h, idx) => (idx === i ? { ...h, [field]: value } : h)));
+  const updateHouseholdCount = (i, eventId, value) =>
+    setHouseholds((hs) =>
+      hs.map((h, idx) => (idx === i ? { ...h, eventCounts: { ...h.eventCounts, [eventId]: value } } : h))
+    );
 
   async function submit() {
     setSaving(true);
     setError(null);
     try {
+      const labeledEvents = events.filter((e) => e.label.trim());
       const res = await fetch("/api/host/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           coupleName,
           themeKey,
-          events: events
-            .filter((e) => e.label.trim())
-            .map((e) => ({ ...e, ...splitDate(e.date), time: formatTime(e.time) })),
-          households: households.filter((h) => h.name.trim()),
+          events: labeledEvents.map((e) => ({ ...e, ...splitDate(e.date), time: formatTime(e.time) })),
+          households: households
+            .filter((h) => h.name.trim())
+            .map((h) => ({
+              name: h.name,
+              phone: h.phone,
+              eventCounts: labeledEvents.map((e) => h.eventCounts[e.id] ?? DEFAULT_COUNT),
+            })),
         }),
       });
       const data = await res.json();
@@ -113,7 +124,7 @@ export default function HostNewPage() {
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>Events</h2>
       {events.map((e, i) => (
-        <div key={i} style={card}>
+        <div key={e.id} style={card}>
           <label style={label}>Event name</label>
           <input style={input} placeholder="e.g. Nikah" value={e.label} onChange={(x) => updateEvent(i, "label", x.target.value)} />
           <div style={row}>
@@ -145,25 +156,41 @@ export default function HostNewPage() {
       <button style={ghostBtn} onClick={() => setEvents((ev) => [...ev, emptyEvent()])}>+ Add event</button>
 
       <h2 style={{ fontSize: 16, marginTop: 24 }}>Households</h2>
-      {households.map((h, i) => (
-        <div key={i} style={card}>
-          <div style={row}>
-            <div>
-              <label style={label}>Household name</label>
-              <input style={input} placeholder="The Khan Family" value={h.name} onChange={(x) => updateHousehold(i, "name", x.target.value)} />
-            </div>
-            <div>
-              <label style={label}>Number invited</label>
-              <input type="number" min={1} style={input} value={h.invitedCount} onChange={(x) => updateHousehold(i, "invitedCount", parseInt(x.target.value) || 1)} />
-            </div>
+      {households.map((h, i) => {
+        const labeledEvents = events.filter((e) => e.label.trim());
+        return (
+          <div key={h.id} style={card}>
+            <label style={label}>Household name</label>
+            <input style={input} placeholder="The Khan Family" value={h.name} onChange={(x) => updateHousehold(i, "name", x.target.value)} />
+            <label style={label}>Phone (optional)</label>
+            <input style={input} value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
+
+            {labeledEvents.length > 0 ? (
+              <>
+                <label style={label}>How many are invited to each event?</label>
+                {labeledEvents.map((e) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 6 }}>
+                    <span style={{ fontSize: 14 }}>{e.label}</span>
+                    <input
+                      type="number" min={0}
+                      style={{ ...input, width: 80 }}
+                      value={h.eventCounts[e.id] ?? DEFAULT_COUNT}
+                      onChange={(x) => updateHouseholdCount(i, e.id, Math.max(0, parseInt(x.target.value) || 0))}
+                    />
+                  </div>
+                ))}
+                <div style={{ fontSize: 12, color: "#77705F", marginTop: 6 }}>0 = not invited to that event.</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: "#77705F", marginTop: 10 }}>Add an event above to set headcounts.</div>
+            )}
+
+            {households.length > 1 && (
+              <button style={{ ...ghostBtn, marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setHouseholds((hs) => hs.filter((_, idx) => idx !== i))}>Remove household</button>
+            )}
           </div>
-          <label style={label}>Phone (optional)</label>
-          <input style={input} value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
-          {households.length > 1 && (
-            <button style={{ ...ghostBtn, marginTop: 10, fontSize: 12, padding: "6px 12px" }} onClick={() => setHouseholds((hs) => hs.filter((_, idx) => idx !== i))}>Remove household</button>
-          )}
-        </div>
-      ))}
+        );
+      })}
       <button style={ghostBtn} onClick={() => setHouseholds((hs) => [...hs, emptyHousehold()])}>+ Add household</button>
 
       {error && <div style={{ color: "#B0402C", marginTop: 16, fontSize: 14 }}>{error}</div>}
