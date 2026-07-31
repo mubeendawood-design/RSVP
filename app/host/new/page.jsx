@@ -2,8 +2,31 @@
 
 import { useState } from "react";
 
-const emptyEvent = () => ({ label: "", dayLabel: "", dateNum: "", monthLabel: "", yearLabel: "", time: "", venue: "", dress: "", parking: "" });
+const emptyEvent = () => ({ label: "", date: "", time: "", venue: "", dress: "", parking: "" });
 const emptyHousehold = () => ({ name: "", invitedCount: 4, phone: "" });
+
+const DAY_NAMES = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+// "17:00" -> "5:00 PM"
+function formatTime(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+function splitDate(isoDate) {
+  if (!isoDate) return { dayLabel: "", dateNum: "", monthLabel: "", yearLabel: "" };
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return {
+    dayLabel: DAY_NAMES[dt.getDay()],
+    dateNum: String(d),
+    monthLabel: MONTH_NAMES[m - 1],
+    yearLabel: String(y),
+  };
+}
 
 export default function HostNewPage() {
   const [coupleName, setCoupleName] = useState("");
@@ -29,7 +52,9 @@ export default function HostNewPage() {
         body: JSON.stringify({
           coupleName,
           themeKey,
-          events: events.filter((e) => e.label.trim()),
+          events: events
+            .filter((e) => e.label.trim())
+            .map((e) => ({ ...e, ...splitDate(e.date), time: formatTime(e.time) })),
           households: households.filter((h) => h.name.trim()),
         }),
       });
@@ -93,28 +118,21 @@ export default function HostNewPage() {
           <input style={input} placeholder="e.g. Nikah" value={e.label} onChange={(x) => updateEvent(i, "label", x.target.value)} />
           <div style={row}>
             <div>
-              <label style={label}>Day</label>
-              <input style={input} placeholder="SATURDAY" value={e.dayLabel} onChange={(x) => updateEvent(i, "dayLabel", x.target.value)} />
+              <label style={label}>Date</label>
+              <input type="date" style={input} value={e.date} onChange={(x) => updateEvent(i, "date", x.target.value)} />
             </div>
             <div>
               <label style={label}>Time</label>
-              <input style={input} placeholder="1:00 PM" value={e.time} onChange={(x) => updateEvent(i, "time", x.target.value)} />
+              <input type="time" style={input} value={e.time} onChange={(x) => updateEvent(i, "time", x.target.value)} />
             </div>
           </div>
-          <div style={row}>
-            <div>
-              <label style={label}>Date</label>
-              <input style={input} placeholder="12 SEP 2026" value={[e.dateNum, e.monthLabel, e.yearLabel].filter(Boolean).join(" ")}
-                onChange={(x) => {
-                  const [dateNum, monthLabel, yearLabel] = x.target.value.split(" ");
-                  updateEvent(i, "dateNum", dateNum || ""); updateEvent(i, "monthLabel", monthLabel || ""); updateEvent(i, "yearLabel", yearLabel || "");
-                }} />
+          {e.date && (
+            <div style={{ fontSize: 12, color: "#77705F", marginTop: 4 }}>
+              {splitDate(e.date).dayLabel}, {splitDate(e.date).dateNum} {splitDate(e.date).monthLabel} {splitDate(e.date).yearLabel}
             </div>
-            <div>
-              <label style={label}>Venue</label>
-              <input style={input} placeholder="Masjid-e-Salaam, Preston" value={e.venue} onChange={(x) => updateEvent(i, "venue", x.target.value)} />
-            </div>
-          </div>
+          )}
+          <label style={label}>Venue</label>
+          <input style={input} placeholder="Masjid-e-Salaam, Preston" value={e.venue} onChange={(x) => updateEvent(i, "venue", x.target.value)} />
           <label style={label}>Dress code (optional)</label>
           <input style={input} value={e.dress} onChange={(x) => updateEvent(i, "dress", x.target.value)} />
           <label style={label}>Parking notes (optional)</label>
