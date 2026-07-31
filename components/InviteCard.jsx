@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 // ---------------- Demo data ----------------
 const HOUSEHOLD = { name: "The Khan Family", invited: 6 };
@@ -176,17 +177,60 @@ function Seal({ t, label, onClick, size = 92 }) {
 }
 
 // ---------------- Main ----------------
-export default function GuestInvite() {
-  const [themeKey, setThemeKey] = useState("ivory");
+export default function GuestInvite({ token, live }) {
+  // Real household/events from Supabase when available (live prop from the
+  // server-rendered token route); otherwise fall back to the built-in demo.
+  const HOUSEHOLD_ = live ? live.household : HOUSEHOLD;
+  const EVENTS_ = live ? live.events : EVENTS;
+
+  const [themeKey, setThemeKey] = useState(live ? live.theme_key : "ivory");
   const t = THEMES[themeKey];
   const [opened, setOpened] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [rsvp, setRsvp] = useState({ mehndi: null, nikah: null, walima: null });
-  const [dietary, setDietary] = useState("");
+  const initialRsvp = Object.fromEntries(
+    EVENTS_.map((e) => [e.id, live ? e.rsvp ?? null : null])
+  );
+  const [rsvp, setRsvp] = useState(initialRsvp);
+  const [dietary, setDietary] = useState(
+    live ? EVENTS_.find((e) => e.dietary)?.dietary ?? "" : ""
+  );
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
-  const answered = EVENTS.filter((e) => rsvp[e.id] !== null).length;
-  const set = (id, n) => setRsvp((r) => ({ ...r, [id]: Math.max(0, Math.min(HOUSEHOLD.invited, n)) }));
+  const answered = EVENTS_.filter((e) => rsvp[e.id] !== null).length;
+  const set = (id, n) => setRsvp((r) => ({ ...r, [id]: Math.max(0, Math.min(HOUSEHOLD_.invited, n)) }));
+
+  // Writes each answered event's RSVP back to Supabase (no-op in demo mode,
+  // since there's no real token to save against).
+  async function saveRsvp() {
+    if (!live || !token || !supabase) {
+      setSubmitted(true);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const results = await Promise.all(
+        EVENTS_.map((e) =>
+          supabase.rpc("submit_rsvp", {
+            p_token: token,
+            p_event_slug: e.id,
+            p_attending: rsvp[e.id],
+            p_dietary: dietary,
+          })
+        )
+      );
+      if (results.some((r) => r.error || r.data === false)) {
+        throw new Error("One or more RSVPs failed to save");
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setSaveError("Couldn't save your RSVP — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const serif = "'Cormorant Garamond', serif";
   const script = "'Great Vibes', cursive";
@@ -236,7 +280,7 @@ export default function GuestInvite() {
     </a>
   );
 
-  const ev = detail ? EVENTS.find((x) => x.id === detail) : null;
+  const ev = detail ? EVENTS_.find((x) => x.id === detail) : null;
 
   return (
     <div style={{
@@ -282,7 +326,7 @@ export default function GuestInvite() {
               <div style={{ fontFamily: arabic, fontSize: 24, color: t.ink, ...press }}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
               <div style={{ ...caps(10), marginTop: 6 }}>In the name of Allah, the Most Gracious, the Most Merciful</div>
               <Divider t={t} />
-              <div style={{ fontFamily: serif, fontSize: 27, ...press, margin: "6px 0 2px" }}>{HOUSEHOLD.name}</div>
+              <div style={{ fontFamily: serif, fontSize: 27, ...press, margin: "6px 0 2px" }}>{HOUSEHOLD_.name}</div>
               <div style={caps(11, t.light ? t.arch : t.gold)}>You are invited</div>
               <div style={{ marginTop: 30, display: "grid", placeItems: "center", gap: 12 }}>
                 <Seal t={t} label="Break the seal to open your invitation" onClick={() => setOpened(true)} />
@@ -366,13 +410,13 @@ export default function GuestInvite() {
                 <div style={{ fontFamily: serif, fontSize: 34, letterSpacing: 3, ...press }}>HAMZA</div>
                 <div style={{ ...caps(10), marginTop: 10 }}>request the pleasure of your company</div>
                 <Divider t={t} />
-                <div style={{ fontFamily: serif, fontSize: 17 }}>{HOUSEHOLD.name}</div>
-                <div style={caps(10)}>{HOUSEHOLD.invited} invited</div>
+                <div style={{ fontFamily: serif, fontSize: 17 }}>{HOUSEHOLD_.name}</div>
+                <div style={caps(10)}>{HOUSEHOLD_.invited} invited</div>
               </Arch>
             </div>
 
             {/* Event inserts */}
-            {!submitted && EVENTS.map((e) => (
+            {!submitted && EVENTS_.map((e) => (
               <div key={e.id} style={insert}>
                 <PaperTexture opacity={t.light ? 0.04 : 0.08} />
                 <button
@@ -417,9 +461,14 @@ export default function GuestInvite() {
                     boxShadow: "inset 0 1px 3px rgba(0,0,0,.12)",
                   }}
                 />
-                <button disabled={answered < EVENTS.length} onClick={() => setSubmitted(true)} style={{ ...inkBtn(answered === EVENTS.length), marginTop: 14 }}>
-                  {answered < EVENTS.length ? `Answer all ${EVENTS.length} events (${answered}/${EVENTS.length})` : "Send RSVP"}
+                <button disabled={answered < EVENTS_.length || saving} onClick={saveRsvp} style={{ ...inkBtn(answered === EVENTS_.length), marginTop: 14 }}>
+                  {answered < EVENTS_.length
+                    ? `Answer all ${EVENTS_.length} events (${answered}/${EVENTS_.length})`
+                    : saving ? "Sending…" : "Send RSVP"}
                 </button>
+                {saveError && (
+                  <div style={{ color: "#B0402C", fontSize: 12, marginTop: 8, textAlign: "center" }}>{saveError}</div>
+                )}
               </div>
             )}
 
@@ -432,7 +481,7 @@ export default function GuestInvite() {
                 </div>
                 <div style={{ fontFamily: serif, fontSize: 26, ...press }}>JazakAllah Khair</div>
                 <div style={{ fontSize: 13, color: t.sub, margin: "6px 0 16px" }}>Your reply has been sent to the hosts.</div>
-                {EVENTS.map((e) => (
+                {EVENTS_.map((e) => (
                   <div key={e.id} style={{ display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${t.gold}33`, padding: "9px 4px", fontSize: 14 }}>
                     <span style={{ fontFamily: serif, fontSize: 17 }}>{e.label}</span>
                     <span style={{ color: rsvp[e.id] ? t.ink : t.sub }}>{rsvp[e.id] ? `${rsvp[e.id]} attending` : "Not attending"}</span>
