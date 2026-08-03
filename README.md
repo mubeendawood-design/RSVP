@@ -43,7 +43,7 @@ Push to GitHub, then import the repo at vercel.com — zero config needed.
 3. ~~`/i/[token]` reads real household + events from Supabase~~
 4. ~~RSVP write-back~~ — .ics calendar files still outstanding
 5. ~~Bare-bones host creation flow~~ (`/host/new`) — create wedding, add events, add households with **per-event headcounts** (e.g. 6 to the Nikah, 2 to the Walima), generate links. No editing existing weddings, no live headcount/dietary view yet — those are next.
-6. Host dashboard proper: view/edit an existing wedding, live RSVP headcount + dietary tracker, per-household resend. (Fuller version built in a separate earlier session — not yet merged into this repo.)
+6. ~~Host dashboard proper~~: `/host` lists all weddings; `/host/[id]` shows live per-event RSVP tracker (confirmed/declined/awaiting + dietary notes) and household table with copy-invite + WhatsApp buttons. Built fresh against the live schema (the separately-built earlier version was superseded — wrong schema assumptions). Editing an existing wedding still outstanding.
 7. Auth on `/host/*` routes (currently open to anyone with the URL)
 8. Reminders (Twilio SMS → WhatsApp Business API), Stripe checkout, seating planner
 
