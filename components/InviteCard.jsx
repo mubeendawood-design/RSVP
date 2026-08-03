@@ -152,7 +152,7 @@ function DateBlock({ t, e, size = 1 }) {
   );
 }
 
-function Seal({ t, label, onClick, size = 92 }) {
+function Seal({ t, label, onClick, size = 92, initials = "A·H" }) {
   return (
     <button
       onClick={onClick}
@@ -170,7 +170,7 @@ function Seal({ t, label, onClick, size = 92 }) {
       }}
     >
       <span style={{ border: "1px solid rgba(74,55,26,.5)", borderRadius: "50%", width: "74%", height: "74%", display: "grid", placeItems: "center" }}>
-        A·H
+        {initials}
       </span>
     </button>
   );
@@ -189,6 +189,7 @@ export default function GuestInvite({ token, live }) {
     ? live.couple_name.split(/\s+(?:and|&)\s+/i).map((s) => s.trim().toUpperCase())
     : ["AYESHA", "HAMZA"];
   const [NAME1, NAME2] = [coupleParts[0] || "AYESHA", coupleParts[1] || "HAMZA"];
+  const INITIALS = `${NAME1[0] || "A"}·${NAME2[0] || "H"}`;
 
   const [themeKey, setThemeKey] = useState(live ? live.theme_key : "ivory");
   const t = THEMES[themeKey];
@@ -340,7 +341,7 @@ export default function GuestInvite({ token, live }) {
               <div style={{ fontFamily: serif, fontSize: 27, ...press, margin: "6px 0 2px" }}>{HOUSEHOLD_.name}</div>
               <div style={caps(11, t.light ? t.arch : t.gold)}>You are invited</div>
               <div style={{ marginTop: 30, display: "grid", placeItems: "center", gap: 12 }}>
-                <Seal t={t} label="Break the seal to open your invitation" onClick={() => setOpened(true)} />
+                <Seal t={t} label="Break the seal to open your invitation" onClick={() => setOpened(true)} initials={INITIALS} />
                 <div style={caps(10)}>Tap the seal to open</div>
               </div>
             </Arch>
@@ -493,7 +494,7 @@ export default function GuestInvite({ token, live }) {
               <div className="rise" style={{ ...card, marginTop: 16, padding: "34px 26px 30px", textAlign: "center" }}>
                 <PaperTexture opacity={t.light ? 0.05 : 0.1} />
                 <div style={{ display: "grid", placeItems: "center", marginBottom: 10 }}>
-                  <Seal t={t} size={70} label="RSVP sealed" onClick={() => {}} />
+                  <Seal t={t} size={70} label="RSVP sealed" onClick={() => {}} initials={INITIALS} />
                 </div>
                 <div style={{ fontFamily: serif, fontSize: 26, ...press }}>JazakAllah Khair</div>
                 <div style={{ fontSize: 13, color: t.sub, margin: "6px 0 16px" }}>Your reply has been sent to the hosts.</div>
