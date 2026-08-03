@@ -48,7 +48,21 @@ export default function HostNewPage() {
       hs.map((h, idx) => (idx === i ? { ...h, eventCounts: { ...h.eventCounts, [eventId]: value } } : h))
     );
 
+  function validatePhones() {
+    const named = households.filter((h) => h.name.trim());
+    for (const h of named) {
+      const digits = h.phone.replace(/[^\d+]/g, "");
+      if (digits.length < 10) return `${h.name || "A household"} needs a valid mobile number — this is how their invite gets sent.`;
+    }
+    return null;
+  }
+
   async function submit() {
+    const phoneError = validatePhones();
+    if (phoneError) {
+      setError(phoneError);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -93,6 +107,8 @@ export default function HostNewPage() {
         <p style={{ color: "#77705F" }}>Copy each link and send it to that household on WhatsApp. The link is the invitation.</p>
         {result.households.map((h) => {
           const link = typeof window !== "undefined" ? `${window.location.origin}/i/${h.token}` : `/i/${h.token}`;
+          const waDigits = (h.phone || "").replace(/[^\d+]/g, "").replace(/^0/, "44").replace("+", "");
+          const waText = encodeURIComponent(`You're invited! ${link}`);
           return (
             <div key={h.token} style={card}>
               <div style={{ fontWeight: 600 }}>{h.name} <span style={{ fontWeight: 400, color: "#77705F" }}>({h.invited} invited)</span></div>
@@ -100,6 +116,12 @@ export default function HostNewPage() {
                 <input readOnly value={link} style={{ ...input, background: "#fff" }} onFocus={(e) => e.target.select()} />
                 <button style={btn} onClick={() => navigator.clipboard.writeText(link)}>Copy</button>
               </div>
+              {waDigits && (
+                <a href={`https://wa.me/${waDigits}?text=${waText}`} target="_blank" rel="noopener noreferrer"
+                   style={{ ...ghostBtn, display: "inline-block", marginTop: 8, textDecoration: "none", fontSize: 13 }}>
+                  Send on WhatsApp →
+                </a>
+              )}
             </div>
           );
         })}
@@ -162,8 +184,8 @@ export default function HostNewPage() {
           <div key={h.id} style={card}>
             <label style={label}>Household name</label>
             <input style={input} placeholder="The Khan Family" value={h.name} onChange={(x) => updateHousehold(i, "name", x.target.value)} />
-            <label style={label}>Phone (optional)</label>
-            <input style={input} value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
+            <label style={label}>Mobile number (required — this is how their invite gets sent)</label>
+            <input style={input} placeholder="+44 7XXX XXXXXX" value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
 
             {labeledEvents.length > 0 ? (
               <>

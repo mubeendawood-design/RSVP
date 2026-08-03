@@ -31,6 +31,14 @@ export async function POST(req) {
     );
   }
 
+  const badPhone = households.find((h) => (h.phone || "").replace(/[^\d+]/g, "").length < 10);
+  if (badPhone) {
+    return NextResponse.json(
+      { error: `${badPhone.name || "A household"} needs a valid mobile number.` },
+      { status: 400 }
+    );
+  }
+
   // 1. Create the wedding
   const { data: wedding, error: wErr } = await supabaseAdmin
     .from("weddings")
@@ -112,6 +120,7 @@ export async function POST(req) {
       name: h.name,
       invited: h.invited_count,
       token: h.token,
+      phone: h.phone,
     })),
   });
 }
