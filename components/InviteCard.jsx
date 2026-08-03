@@ -311,54 +311,23 @@ function downloadICS(events, coupleLabel, token) {
 }
 
 // ---------------- Smart one-button "Add to my calendar" ----------------
-// The guest shouldn't have to know what calendar tech they use. Detect the
-// platform and take the best path automatically:
-//   iOS      → .ics download. iOS opens the native Calendar add-sheet
-//              directly — no login, no downloads folder — and if the guest's
-//              Google account is synced to the iPhone, the event still lands
-//              in Google Calendar. This is also the path that behaves best
-//              inside WhatsApp's locked-down in-app browser.
-//   Android  → intent:// link that escapes the in-app browser and opens the
-//              installed Google Calendar app (already logged in), pre-filled.
-//              Falls back to the calendar.google.com web page if no app.
-//   Desktop  → .ics download (imports into Apple Calendar / Outlook app);
-//              web links available under "Other calendar options".
-function getPlatform() {
-  if (typeof navigator === "undefined") return "other";
-  const ua = navigator.userAgent || "";
-  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
-  if (/Android/i.test(ua)) return "android";
-  return "other";
-}
-
-// Wraps a Google Calendar web link in an Android intent so the tap jumps
-// out of WhatsApp/Chrome's in-app browser into the native Calendar app.
-function buildAndroidCalendarIntent(e, coupleLabel) {
-  const webUrl = buildGoogleCalendarLink(e, coupleLabel);
-  if (!webUrl) return null;
-  const withoutScheme = webUrl.replace(/^https:\/\//, "");
-  return `intent://${withoutScheme}#Intent;scheme=https;package=com.google.android.calendar;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`;
-}
-
+// .ics on every platform, no exceptions. Previously tried an Android
+// intent:// shortcut here to jump straight into the Google Calendar app,
+// but it isn't reliable from inside WhatsApp's in-app browser — the handoff
+// often fails and drops the guest onto the Google Calendar *website* in a
+// fresh, logged-out context, which is exactly the "please log in to Gmail"
+// friction we're trying to avoid. .ics never touches a website, so there's
+// nothing to log into: iOS opens the native Calendar add-sheet directly,
+// Android hands it to whichever calendar app is installed (already signed
+// in), desktop imports into Apple Calendar / Outlook. Slightly less "magic"
+// than jumping straight into an app, but it's the one path that never shows
+// a login screen.
 function addToCalendar(events, coupleLabel, token) {
-  const platform = getPlatform();
   const validEvents = events.filter((e) => parseEventDateTime(e));
   if (!validEvents.length) {
     alert("Event dates aren't confirmed yet — check back closer to the day.");
     return;
   }
-
-  // Android with a single event: straight into the Calendar app, pre-filled.
-  // (Intent links carry one event only — multi-event weddings on Android get
-  // the .ics, with per-event app links under "Other calendar options".)
-  if (platform === "android" && validEvents.length === 1) {
-    const intent = buildAndroidCalendarIntent(validEvents[0], coupleLabel);
-    if (intent) {
-      window.location.href = intent;
-      return;
-    }
-  }
-
   downloadICS(validEvents, coupleLabel, token);
 }
 
