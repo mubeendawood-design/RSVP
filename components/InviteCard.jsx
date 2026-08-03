@@ -176,6 +176,96 @@ function Seal({ t, label, onClick, size = 92, initials = "A·H" }) {
   );
 }
 
+// ---------------- ICS calendar export ----------------
+// Events are stored as display strings only (dateNum '11', month 'SEP',
+// year '2026', time '6:00 PM') — there's no raw timestamp column in the
+// schema. We parse those strings back into wall-clock components and write
+// them straight into the .ics text with an explicit TZID, rather than going
+// through a real JS Date/toISOString. That means the file always reflects
+// the venue's actual UK clock time, regardless of what timezone the guest's
+// own phone or browser happens to be set to.
+const ICS_MONTH_INDEX = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+const ICS_EVENT_DURATION_HOURS = 3; // no end-time field yet — reasonable default for a wedding function
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+// Turns { dateNum, month, year, time } into a neutral Date object used only
+// as a calendar/clock calculator (for adding hours, handling month/day
+// rollover) — never treated as a real UTC instant.
+function parseEventDateTime(e) {
+  const day = parseInt(e?.dateNum, 10);
+  const month = ICS_MONTH_INDEX[String(e?.month || "").toUpperCase()];
+  const year = parseInt(e?.year, 10);
+  if (!day || month === undefined || !year) return null;
+
+  let hour = 0, minute = 0;
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(e?.time || "").trim());
+  if (m) {
+    hour = parseInt(m[1], 10) % 12;
+    minute = parseInt(m[2], 10);
+    if (/pm/i.test(m[3])) hour += 12;
+  }
+  return new Date(Date.UTC(year, month, day, hour, minute));
+}
+
+function formatICSLocal(d) {
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}00`;
+}
+
+function formatICSStamp(d) {
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
+}
+
+function icsEscape(str) {
+  return String(str || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+
+function buildICS(events, coupleLabel, token) {
+  const stamp = formatICSStamp(new Date());
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Haanji//Wedding Invite//EN", "CALSCALE:GREGORIAN"];
+
+  events.forEach((e) => {
+    const start = parseEventDateTime(e);
+    if (!start) return; // skip events we can't confidently place on a calendar
+    const end = new Date(start.getTime() + ICS_EVENT_DURATION_HOURS * 60 * 60 * 1000);
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${e.id || e.label}-${token || "guest"}@haanji.app`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=Europe/London:${formatICSLocal(start)}`,
+      `DTEND;TZID=Europe/London:${formatICSLocal(end)}`,
+      `SUMMARY:${icsEscape(`${coupleLabel} — ${e.label}`)}`
+    );
+    if (e.venue) lines.push(`LOCATION:${icsEscape(e.venue)}`);
+    if (e.maps) lines.push(`DESCRIPTION:${icsEscape(e.maps)}`);
+    lines.push("END:VEVENT");
+  });
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+function downloadICS(events, coupleLabel, token) {
+  const validEvents = events.filter((e) => parseEventDateTime(e));
+  if (!validEvents.length) {
+    alert("Event dates aren't confirmed yet — check back closer to the day.");
+    return;
+  }
+  const ics = buildICS(validEvents, coupleLabel, token);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(coupleLabel || "wedding").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---------------- Main ----------------
 export default function GuestInvite({ token, live }) {
   // Real household/events from Supabase when available (live prop from the
@@ -604,7 +694,7 @@ export default function GuestInvite({ token, live }) {
                   </div>
                 ))}
                 {dietary && <div style={{ fontSize: 13, color: t.sub, marginTop: 12 }}>Dietary: {dietary}</div>}
-                <button onClick={() => alert("Would download .ics / open Google Calendar")} style={{ ...inkBtn(true), marginTop: 20 }}>
+                <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 20 }}>
                   Add all events to calendar
                 </button>
                 <button onClick={() => setSubmitted(false)} style={{ marginTop: 10, background: "transparent", border: "none", color: t.sub, fontSize: 13, textDecoration: "underline" }}>
