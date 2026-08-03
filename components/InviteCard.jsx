@@ -183,6 +183,13 @@ export default function GuestInvite({ token, live }) {
   const HOUSEHOLD_ = live ? live.household : HOUSEHOLD;
   const EVENTS_ = live ? live.events : EVENTS;
 
+  // Split "Zainab and Hassan" into ["ZAINAB", "HASSAN"]; falls back to the
+  // demo names if live data has no couple_name or an unexpected format.
+  const coupleParts = live?.couple_name
+    ? live.couple_name.split(/\s+(?:and|&)\s+/i).map((s) => s.trim().toUpperCase())
+    : ["AYESHA", "HAMZA"];
+  const [NAME1, NAME2] = [coupleParts[0] || "AYESHA", coupleParts[1] || "HAMZA"];
+
   const [themeKey, setThemeKey] = useState(live ? live.theme_key : "ivory");
   const t = THEMES[themeKey];
   const [opened, setOpened] = useState(false);
@@ -355,9 +362,9 @@ export default function GuestInvite({ token, live }) {
               <Arch t={t} minHeight={280}>
                 <div style={{ fontFamily: arabic, fontSize: 20, ...press }}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
                 <div style={{ ...caps(10), marginTop: 8 }}>Together with their families</div>
-                <div style={{ fontFamily: serif, fontSize: 26, letterSpacing: 2, marginTop: 6, ...press }}>AYESHA</div>
+                <div style={{ fontFamily: serif, fontSize: 26, letterSpacing: 2, marginTop: 6, ...press }}>{NAME1}</div>
                 <div style={{ fontFamily: script, fontSize: 26, color: t.light ? t.arch : t.gold, lineHeight: 1 }}>and</div>
-                <div style={{ fontFamily: serif, fontSize: 26, letterSpacing: 2, ...press }}>HAMZA</div>
+                <div style={{ fontFamily: serif, fontSize: 26, letterSpacing: 2, ...press }}>{NAME2}</div>
                 <div style={{ ...caps(10), marginTop: 10 }}>request the pleasure of your company at the</div>
                 <div style={{ fontFamily: serif, fontSize: 40, ...press, margin: "4px 0 0" }}>{ev.label}</div>
                 <Divider t={t} />
@@ -409,9 +416,9 @@ export default function GuestInvite({ token, live }) {
                 <div style={{ ...caps(10), marginTop: 6 }}>In the name of Allah, the Most Gracious, the Most Merciful</div>
                 <Divider t={t} />
                 <div style={caps(10)}>Together with their families</div>
-                <div style={{ fontFamily: serif, fontSize: 34, letterSpacing: 3, marginTop: 8, ...press }}>AYESHA</div>
+                <div style={{ fontFamily: serif, fontSize: 34, letterSpacing: 3, marginTop: 8, ...press }}>{NAME1}</div>
                 <div style={{ fontFamily: script, fontSize: 30, color: t.light ? t.arch : t.gold, lineHeight: 1.1 }}>and</div>
-                <div style={{ fontFamily: serif, fontSize: 34, letterSpacing: 3, ...press }}>HAMZA</div>
+                <div style={{ fontFamily: serif, fontSize: 34, letterSpacing: 3, ...press }}>{NAME2}</div>
                 <div style={{ ...caps(10), marginTop: 10 }}>request the pleasure of your company</div>
                 <Divider t={t} />
                 <div style={{ fontFamily: serif, fontSize: 17 }}>{HOUSEHOLD_.name}</div>

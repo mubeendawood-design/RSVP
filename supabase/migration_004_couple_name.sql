@@ -1,0 +1,57 @@
+-- Migration 004 — include couple_name in get_invite
+-- The invite card design has always shown the couple's names, but
+-- get_invite never actually returned them — real weddings showed the
+-- household/venue/date correctly but the demo "Ayesha and Hamza" names
+-- underneath, because the card had no real names to fall back on.
+
+create or replace function get_invite(p_token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  h households%rowtype;
+  result jsonb;
+begin
+  select * into h from households where token = p_token;
+  if not found then
+    return null;
+  end if;
+
+  select jsonb_build_object(
+    'household', jsonb_build_object('name', hh.name, 'invited', hh.invited_count),
+    'theme_key', w.theme_key,
+    'couple_name', w.couple_name,
+    'events', coalesce(jsonb_agg(
+      jsonb_build_object(
+        'id', e.slug,
+        'label', e.label,
+        'day', e.day_label,
+        'dateNum', e.date_num,
+        'month', e.month_label,
+        'year', e.year_label,
+        'time', e.event_time,
+        'venue', e.venue,
+        'maps', e.maps_url,
+        'dress', e.dress,
+        'flow', e.flow,
+        'parking', e.parking,
+        'invited', he.invited_count,
+        'rsvp', r.attending_count,
+        'dietary', r.dietary
+      ) order by e.sort_order
+    ) filter (where e.id is not null), '[]'::jsonb)
+  )
+  into result
+  from households hh
+  join weddings w on w.id = hh.wedding_id
+  join household_events he on he.household_id = hh.id
+  join events e on e.id = he.event_id
+  left join rsvps r on r.household_id = hh.id and r.event_id = e.id
+  where hh.token = p_token
+  group by w.theme_key, w.couple_name, hh.name, hh.invited_count;
+
+  return result;
+end;
+$$;

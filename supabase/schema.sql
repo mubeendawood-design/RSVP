@@ -92,6 +92,7 @@ begin
   select jsonb_build_object(
     'household', jsonb_build_object('name', hh.name, 'invited', hh.invited_count),
     'theme_key', w.theme_key,
+    'couple_name', w.couple_name,
     'events', coalesce(jsonb_agg(
       jsonb_build_object(
         'id', e.slug,
@@ -119,7 +120,7 @@ begin
   join events e on e.id = he.event_id
   left join rsvps r on r.household_id = hh.id and r.event_id = e.id
   where hh.token = p_token
-  group by w.theme_key, hh.name, hh.invited_count;
+  group by w.theme_key, w.couple_name, hh.name, hh.invited_count;
 
   return result;
 end;
