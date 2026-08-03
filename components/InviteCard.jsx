@@ -206,6 +206,38 @@ export default function GuestInvite({ token, live }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
+  // Optional per-person detail (name, approx age, high-chair/elder flags,
+  // accessibility notes) — feeds seating later. Prefilled from a previous
+  // answer if the guest is reopening their link.
+  const emptyAttendee = { name: "", approxAge: "", highChair: false, elderSeating: false, accessibility: "" };
+  const initialAttendees = Object.fromEntries(
+    EVENTS_.map((e) => [
+      e.id,
+      live && Array.isArray(e.attendees)
+        ? e.attendees.map((a) => ({
+            name: a.name || "",
+            approxAge: a.approxAge ?? "",
+            highChair: !!a.highChair,
+            elderSeating: !!a.elderSeating,
+            accessibility: a.accessibility || "",
+          }))
+        : [],
+    ])
+  );
+  const [attendees, setAttendees] = useState(initialAttendees);
+  const [showAttendees, setShowAttendees] = useState(
+    Object.fromEntries(EVENTS_.map((e) => [e.id, (initialAttendees[e.id] || []).length > 0]))
+  );
+  const attendeeRow = (eventId, idx) => attendees[eventId]?.[idx] || emptyAttendee;
+  const updateAttendee = (eventId, idx, field, value) => {
+    setAttendees((all) => {
+      const rows = [...(all[eventId] || [])];
+      while (rows.length <= idx) rows.push({ ...emptyAttendee });
+      rows[idx] = { ...rows[idx], [field]: value };
+      return { ...all, [eventId]: rows };
+    });
+  };
+
   const answered = EVENTS_.filter((e) => rsvp[e.id] !== null).length;
   const set = (id, n) => {
     const ev = EVENTS_.find((x) => x.id === id);
@@ -230,6 +262,16 @@ export default function GuestInvite({ token, live }) {
             p_event_slug: e.id,
             p_attending: rsvp[e.id],
             p_dietary: dietary,
+            p_attendees: (attendees[e.id] || [])
+              .slice(0, rsvp[e.id] || 0)
+              .filter((a) => a.name.trim() || a.approxAge !== "" || a.highChair || a.elderSeating || a.accessibility.trim())
+              .map((a) => ({
+                name: a.name.trim(),
+                approxAge: a.approxAge === "" ? null : Number(a.approxAge),
+                highChair: a.highChair,
+                elderSeating: a.elderSeating,
+                accessibility: a.accessibility.trim(),
+              })),
           })
         )
       );
@@ -286,6 +328,11 @@ export default function GuestInvite({ token, live }) {
     color: enabled ? (t.light ? t.paper : "#2E2410") : `${t.ink}66`,
     fontFamily: "'Jost', sans-serif", fontSize: 13, letterSpacing: 3, textTransform: "uppercase",
   });
+  const miniInput = {
+    background: t.paper, border: `1px solid ${t.gold}55`, borderRadius: 2, color: t.ink,
+    padding: "6px 8px", fontFamily: "'Jost', sans-serif", fontSize: 13,
+    boxShadow: "inset 0 1px 3px rgba(0,0,0,.12)",
+  };
   const mapsLink = (e) => (
     <a href={e.maps} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: t.light ? t.arch : t.gold, letterSpacing: 1 }}>
       Open in Google Maps →
@@ -459,6 +506,58 @@ export default function GuestInvite({ token, live }) {
                   <button onClick={() => set(e.id, (rsvp[e.id] ?? 0) + 1)} aria-label={`More attending ${e.label}`} style={stepBtn}>+</button>
                 </div>
                 {rsvp[e.id] === 0 && <div style={{ fontSize: 12, color: t.sub, marginTop: 6, textAlign: "center" }}>We'll miss you at the {e.label}.</div>}
+
+                {rsvp[e.id] > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={() => setShowAttendees((s) => ({ ...s, [e.id]: !s[e.id] }))}
+                      style={{ background: "transparent", border: "none", color: t.light ? t.arch : t.gold, fontSize: 12, letterSpacing: 0.5, textDecoration: "underline", cursor: "pointer", padding: 0 }}
+                    >
+                      {showAttendees[e.id] ? "Hide guest details" : "+ Add guest names & seating notes (optional)"}
+                    </button>
+                    {showAttendees[e.id] && (
+                      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                        {Array.from({ length: rsvp[e.id] }).map((_, idx) => {
+                          const row = attendeeRow(e.id, idx);
+                          return (
+                            <div key={idx} style={{ border: `1px solid ${t.gold}33`, borderRadius: 4, padding: 8 }}>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <input
+                                  placeholder={`Guest ${idx + 1} name`}
+                                  value={row.name}
+                                  onChange={(x) => updateAttendee(e.id, idx, "name", x.target.value)}
+                                  style={{ ...miniInput, flex: 1 }}
+                                />
+                                <input
+                                  placeholder="Age" type="number" min={0}
+                                  value={row.approxAge}
+                                  onChange={(x) => updateAttendee(e.id, idx, "approxAge", x.target.value)}
+                                  style={{ ...miniInput, width: 56 }}
+                                />
+                              </div>
+                              <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 12, color: t.sub }}>
+                                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <input type="checkbox" checked={row.highChair} onChange={(x) => updateAttendee(e.id, idx, "highChair", x.target.checked)} />
+                                  High chair
+                                </label>
+                                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <input type="checkbox" checked={row.elderSeating} onChange={(x) => updateAttendee(e.id, idx, "elderSeating", x.target.checked)} />
+                                  Elder seating (70+)
+                                </label>
+                              </div>
+                              <input
+                                placeholder="Accessibility / mobility needs (optional)"
+                                value={row.accessibility}
+                                onChange={(x) => updateAttendee(e.id, idx, "accessibility", x.target.value)}
+                                style={{ ...miniInput, width: "100%", marginTop: 6, boxSizing: "border-box" }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
 

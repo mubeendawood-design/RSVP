@@ -93,6 +93,7 @@ export async function POST(req) {
           name: h.name,
           invited_count: overallInvited,
           phone: h.phone || null,
+          side: h.side || null,
         })
         .select()
         .single();

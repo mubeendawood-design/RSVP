@@ -104,7 +104,10 @@ export default async function WeddingDetail({ params }) {
           <div key={h.id} style={{ ...card, padding: "12px 16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <div>
-                <div style={{ fontWeight: 600, color: "#3B3527" }}>{h.name}</div>
+                <div style={{ fontWeight: 600, color: "#3B3527", display: "flex", alignItems: "center", gap: 8 }}>
+                  {h.name}
+                  {h.side && <span style={sideBadge(h.side)}>{SIDE_LABEL[h.side] || h.side}</span>}
+                </div>
                 <div style={{ fontSize: 12, color: "#77705F", marginTop: 2 }}>
                   {(events || []).map((e) => {
                     const inv = inviteFor(h.id, e.id);
@@ -141,3 +144,10 @@ const wrap = { maxWidth: 820, margin: "0 auto", padding: "32px 20px", fontFamily
 const h1 = { fontSize: 28, color: "#3B3527", margin: 0 };
 const muted = { color: "#77705F" };
 const card = { background: "#FBF8F0", border: "1px solid #E4DECB", borderRadius: 12, padding: "16px 18px" };
+
+const SIDE_LABEL = { groom: "Groom's side", bride: "Bride's side", mutual: "Mutual", community: "Community" };
+const SIDE_COLOR = { groom: "#3B5D8A", bride: "#A34C6B", mutual: "#77705F", community: "#7A8F52" };
+const sideBadge = (side) => ({
+  fontSize: 11, fontWeight: 400, textTransform: "none", color: SIDE_COLOR[side] || "#77705F",
+  border: `1px solid ${SIDE_COLOR[side] || "#77705F"}55`, borderRadius: 999, padding: "1px 8px",
+});

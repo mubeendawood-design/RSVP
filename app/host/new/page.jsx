@@ -4,7 +4,7 @@ import { useState } from "react";
 
 const makeId = () => Math.random().toString(36).slice(2, 9);
 const emptyEvent = () => ({ id: makeId(), label: "", date: "", time: "", venue: "", dress: "", parking: "" });
-const emptyHousehold = () => ({ id: makeId(), name: "", phone: "", eventCounts: {} }); // eventCounts: { [eventId]: number }
+const emptyHousehold = () => ({ id: makeId(), name: "", phone: "", side: "", eventCounts: {} }); // eventCounts: { [eventId]: number }
 const DEFAULT_COUNT = 4;
 
 const DAY_NAMES = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
@@ -79,6 +79,7 @@ export default function HostNewPage() {
             .map((h) => ({
               name: h.name,
               phone: h.phone,
+              side: h.side || null,
               eventCounts: labeledEvents.map((e) => h.eventCounts[e.id] ?? DEFAULT_COUNT),
             })),
         }),
@@ -186,6 +187,15 @@ export default function HostNewPage() {
             <input style={input} placeholder="The Khan Family" value={h.name} onChange={(x) => updateHousehold(i, "name", x.target.value)} />
             <label style={label}>Mobile number (required — this is how their invite gets sent)</label>
             <input style={input} placeholder="+44 7XXX XXXXXX" value={h.phone} onChange={(x) => updateHousehold(i, "phone", x.target.value)} />
+
+            <label style={label}>Side (optional — internal only, helps with seating later)</label>
+            <select style={input} value={h.side} onChange={(x) => updateHousehold(i, "side", x.target.value)}>
+              <option value="">Not set</option>
+              <option value="groom">Groom&apos;s side</option>
+              <option value="bride">Bride&apos;s side</option>
+              <option value="mutual">Mutual</option>
+              <option value="community">Community</option>
+            </select>
 
             {labeledEvents.length > 0 ? (
               <>

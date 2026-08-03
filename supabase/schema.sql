@@ -38,6 +38,7 @@ create table if not exists households (
   name text not null,              -- 'The Khan Family'
   invited_count int not null,
   phone text,
+  side text check (side is null or side in ('groom', 'bride', 'mutual', 'community')),
   created_at timestamptz not null default now()
 );
 
@@ -59,6 +60,21 @@ create table if not exists rsvps (
   primary key (household_id, event_id)
 );
 
+-- Per-person detail within a household's RSVP to one event — feeds seating
+-- (elder placement, high chairs) rather than just a headcount.
+create table if not exists attendees (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references households(id) on delete cascade,
+  event_id uuid not null references events(id) on delete cascade,
+  name text,
+  approx_age int,
+  high_chair boolean not null default false,
+  elder_seating boolean not null default false,
+  accessibility_notes text,
+  created_at timestamptz not null default now()
+);
+create index if not exists attendees_household_event_idx on attendees(household_id, event_id);
+
 -- ---------- Row-level security ----------
 -- Guests never query these tables directly — only via the two SECURITY DEFINER
 -- functions below, keyed on the token. No login, no exposed table scans.
@@ -68,6 +84,7 @@ alter table events enable row level security;
 alter table households enable row level security;
 alter table household_events enable row level security;
 alter table rsvps enable row level security;
+alter table attendees enable row level security;
 -- (No policies added = no direct anon access. Host dashboard will use the
 -- Supabase service-role key server-side, which bypasses RLS by design.)
 
@@ -109,7 +126,8 @@ begin
         'parking', e.parking,
         'invited', he.invited_count,
         'rsvp', r.attending_count,
-        'dietary', r.dietary
+        'dietary', r.dietary,
+        'attendees', coalesce(att.attendees, '[]'::jsonb)
       ) order by e.sort_order
     ) filter (where e.id is not null), '[]'::jsonb)
   )
@@ -119,6 +137,19 @@ begin
   join household_events he on he.household_id = hh.id
   join events e on e.id = he.event_id
   left join rsvps r on r.household_id = hh.id and r.event_id = e.id
+  left join lateral (
+    select jsonb_agg(
+      jsonb_build_object(
+        'name', a.name,
+        'approxAge', a.approx_age,
+        'highChair', a.high_chair,
+        'elderSeating', a.elder_seating,
+        'accessibility', a.accessibility_notes
+      ) order by a.created_at
+    ) as attendees
+    from attendees a
+    where a.household_id = hh.id and a.event_id = e.id
+  ) att on true
   where hh.token = p_token
   group by w.theme_key, w.couple_name, hh.name, hh.invited_count;
 
@@ -127,7 +158,14 @@ end;
 $$;
 
 -- 2. Submit/update an RSVP for one event, validated against the token.
-create or replace function submit_rsvp(p_token text, p_event_slug text, p_attending int, p_dietary text)
+-- Also replaces the per-person attendee list for that household+event.
+create or replace function submit_rsvp(
+  p_token text,
+  p_event_slug text,
+  p_attending int,
+  p_dietary text,
+  p_attendees jsonb default '[]'::jsonb
+)
 returns boolean
 language plpgsql
 security definer
@@ -136,6 +174,7 @@ as $$
 declare
   h_id uuid;
   e_id uuid;
+  a jsonb;
 begin
   select h.id into h_id from households h where h.token = p_token;
   if h_id is null then
@@ -159,13 +198,30 @@ begin
                 dietary = excluded.dietary,
                 responded_at = now();
 
+  delete from attendees where household_id = h_id and event_id = e_id;
+
+  if p_attendees is not null and jsonb_typeof(p_attendees) = 'array' then
+    for a in select * from jsonb_array_elements(p_attendees)
+    loop
+      insert into attendees (household_id, event_id, name, approx_age, high_chair, elder_seating, accessibility_notes)
+      values (
+        h_id, e_id,
+        nullif(a->>'name', ''),
+        nullif(a->>'approxAge', '')::int,
+        coalesce((a->>'highChair')::boolean, false),
+        coalesce((a->>'elderSeating')::boolean, false),
+        nullif(a->>'accessibility', '')
+      );
+    end loop;
+  end if;
+
   return true;
 end;
 $$;
 
 -- Allow the anon key to call these two functions (and nothing else)
 grant execute on function get_invite(text) to anon;
-grant execute on function submit_rsvp(text, text, int, text) to anon;
+grant execute on function submit_rsvp(text, text, int, text, jsonb) to anon;
 
 -- ---------- Demo seed data (matches the current InviteCard mock) ----------
 
