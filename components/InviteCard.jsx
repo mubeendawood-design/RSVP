@@ -310,6 +310,58 @@ function downloadICS(events, coupleLabel, token) {
   URL.revokeObjectURL(url);
 }
 
+// ---------------- Smart one-button "Add to my calendar" ----------------
+// The guest shouldn't have to know what calendar tech they use. Detect the
+// platform and take the best path automatically:
+//   iOS      → .ics download. iOS opens the native Calendar add-sheet
+//              directly — no login, no downloads folder — and if the guest's
+//              Google account is synced to the iPhone, the event still lands
+//              in Google Calendar. This is also the path that behaves best
+//              inside WhatsApp's locked-down in-app browser.
+//   Android  → intent:// link that escapes the in-app browser and opens the
+//              installed Google Calendar app (already logged in), pre-filled.
+//              Falls back to the calendar.google.com web page if no app.
+//   Desktop  → .ics download (imports into Apple Calendar / Outlook app);
+//              web links available under "Other calendar options".
+function getPlatform() {
+  if (typeof navigator === "undefined") return "other";
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+  if (/Android/i.test(ua)) return "android";
+  return "other";
+}
+
+// Wraps a Google Calendar web link in an Android intent so the tap jumps
+// out of WhatsApp/Chrome's in-app browser into the native Calendar app.
+function buildAndroidCalendarIntent(e, coupleLabel) {
+  const webUrl = buildGoogleCalendarLink(e, coupleLabel);
+  if (!webUrl) return null;
+  const withoutScheme = webUrl.replace(/^https:\/\//, "");
+  return `intent://${withoutScheme}#Intent;scheme=https;package=com.google.android.calendar;S.browser_fallback_url=${encodeURIComponent(webUrl)};end`;
+}
+
+function addToCalendar(events, coupleLabel, token) {
+  const platform = getPlatform();
+  const validEvents = events.filter((e) => parseEventDateTime(e));
+  if (!validEvents.length) {
+    alert("Event dates aren't confirmed yet — check back closer to the day.");
+    return;
+  }
+
+  // Android with a single event: straight into the Calendar app, pre-filled.
+  // (Intent links carry one event only — multi-event weddings on Android get
+  // the .ics, with per-event app links under "Other calendar options".)
+  if (platform === "android" && validEvents.length === 1) {
+    const intent = buildAndroidCalendarIntent(validEvents[0], coupleLabel);
+    if (intent) {
+      window.location.href = intent;
+      return;
+    }
+  }
+
+  downloadICS(validEvents, coupleLabel, token);
+}
+
 // ---------------- Main ----------------
 export default function GuestInvite({ token, live }) {
   // Real household/events from Supabase when available (live prop from the
@@ -337,6 +389,7 @@ export default function GuestInvite({ token, live }) {
     live ? EVENTS_.find((e) => e.dietary)?.dietary ?? "" : ""
   );
   const [submitted, setSubmitted] = useState(false);
+  const [showCalOptions, setShowCalOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -731,37 +784,48 @@ export default function GuestInvite({ token, live }) {
                 </div>
                 <div style={{ fontFamily: serif, fontSize: 26, ...press }}>JazakAllah Khair</div>
                 <div style={{ fontSize: 13, color: t.sub, margin: "6px 0 16px" }}>Your reply has been sent to the hosts.</div>
-                {EVENTS_.map((e) => {
-                  const gCal = buildGoogleCalendarLink(e, `${NAME1} & ${NAME2}`);
-                  const oCal = buildOutlookLink(e, `${NAME1} & ${NAME2}`);
-                  return (
-                    <div key={e.id} style={{ borderBottom: `1px solid ${t.gold}33`, padding: "9px 4px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                        <span style={{ fontFamily: serif, fontSize: 17 }}>{e.label}</span>
-                        <span style={{ color: rsvp[e.id] ? t.ink : t.sub }}>{rsvp[e.id] ? `${rsvp[e.id]} attending` : "Not attending"}</span>
-                      </div>
-                      {(gCal || oCal) && (
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 14, marginTop: 4 }}>
-                          {gCal && (
-                            <a href={gCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.sub, textDecoration: "underline" }}>
-                              + Google
-                            </a>
-                          )}
-                          {oCal && (
-                            <a href={oCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.sub, textDecoration: "underline" }}>
-                              + Outlook
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {EVENTS_.map((e) => (
+                  <div key={e.id} style={{ display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${t.gold}33`, padding: "9px 4px", fontSize: 14 }}>
+                    <span style={{ fontFamily: serif, fontSize: 17 }}>{e.label}</span>
+                    <span style={{ color: rsvp[e.id] ? t.ink : t.sub }}>{rsvp[e.id] ? `${rsvp[e.id]} attending` : "Not attending"}</span>
+                  </div>
+                ))}
                 {dietary && <div style={{ fontSize: 13, color: t.sub, marginTop: 12 }}>Dietary: {dietary}</div>}
-                <div style={{ ...caps(10, t.sub), marginTop: 20 }}>Or add every event at once</div>
-                <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 8 }}>
-                  Download for Apple Calendar / Outlook app
+                <button onClick={() => addToCalendar(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 20 }}>
+                  Add to my calendar
                 </button>
+                <button onClick={() => setShowCalOptions((v) => !v)} style={{ marginTop: 10, background: "transparent", border: "none", color: t.sub, fontSize: 12, textDecoration: "underline", cursor: "pointer" }}>
+                  Other calendar options
+                </button>
+                {showCalOptions && (
+                  <div style={{ marginTop: 8, textAlign: "left" }}>
+                    {EVENTS_.map((e) => {
+                      const gCal = buildGoogleCalendarLink(e, `${NAME1} & ${NAME2}`);
+                      const oCal = buildOutlookLink(e, `${NAME1} & ${NAME2}`);
+                      if (!gCal && !oCal) return null;
+                      return (
+                        <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 4px", borderBottom: `1px solid ${t.gold}22`, fontSize: 13 }}>
+                          <span style={{ fontFamily: serif, fontSize: 15 }}>{e.label}</span>
+                          <span style={{ display: "flex", gap: 14 }}>
+                            {gCal && (
+                              <a href={gCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.sub, textDecoration: "underline" }}>
+                                Google
+                              </a>
+                            )}
+                            {oCal && (
+                              <a href={oCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: t.sub, textDecoration: "underline" }}>
+                                Outlook
+                              </a>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ marginTop: 8, background: "transparent", border: "none", color: t.sub, fontSize: 12, textDecoration: "underline", cursor: "pointer", padding: "4px" }}>
+                      Download calendar file (.ics) — all events
+                    </button>
+                  </div>
+                )}
                 <button onClick={() => setSubmitted(false)} style={{ marginTop: 10, background: "transparent", border: "none", color: t.sub, fontSize: 13, textDecoration: "underline" }}>
                   Change my answer
                 </button>
