@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-function info(v: string | undefined) {
+function info(v) {
   if (!v) return { present: false, length: 0 };
   return { present: true, length: v.length, trimmedLength: v.trim().length };
 }
@@ -28,7 +28,7 @@ export async function GET() {
     } else {
       dbConnection = 'skipped — missing URL or service key';
     }
-  } catch (e: any) {
+  } catch (e) {
     dbConnection = `threw: ${e.message}`;
   }
 
