@@ -248,6 +248,50 @@ function buildICS(events, coupleLabel, token) {
   return lines.join("\r\n");
 }
 
+// Google and Outlook only accept one event per link (no multi-VEVENT
+// support like a .ics file has), so these are built per-event and shown
+// as small quick-add links next to each event row. The .ics download
+// stays as the "everything in one go" option below them.
+function buildGoogleCalendarLink(e, coupleLabel) {
+  const start = parseEventDateTime(e);
+  if (!start) return null;
+  const end = new Date(start.getTime() + ICS_EVENT_DURATION_HOURS * 60 * 60 * 1000);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${coupleLabel} — ${e.label}`,
+    // No Z suffix + ctz: Google reads these as wall-clock time IN that
+    // named zone (not the viewer's own device zone), same guarantee as
+    // the TZID approach used for the .ics file.
+    dates: `${formatICSLocal(start)}/${formatICSLocal(end)}`,
+    ctz: "Europe/London",
+  });
+  if (e.venue) params.set("location", e.venue);
+  if (e.maps) params.set("details", e.maps);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function buildOutlookLink(e, coupleLabel) {
+  const start = parseEventDateTime(e);
+  if (!start) return null;
+  const end = new Date(start.getTime() + ICS_EVENT_DURATION_HOURS * 60 * 60 * 1000);
+  // Outlook's web compose link has no reliable timezone parameter — omitting
+  // the trailing Z makes it read the time as the guest's own device
+  // timezone. Fine for the large majority of guests (UK-based); flagged as
+  // a known gap rather than silently assumed correct.
+  const toOutlookLocal = (d) =>
+    `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:00`;
+  const params = new URLSearchParams({
+    path: "/calendar/action/compose",
+    rru: "addevent",
+    subject: `${coupleLabel} — ${e.label}`,
+    startdt: toOutlookLocal(start),
+    enddt: toOutlookLocal(end),
+  });
+  if (e.venue) params.set("location", e.venue);
+  if (e.maps) params.set("body", e.maps);
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
 function downloadICS(events, coupleLabel, token) {
   const validEvents = events.filter((e) => parseEventDateTime(e));
   if (!validEvents.length) {
@@ -687,15 +731,36 @@ export default function GuestInvite({ token, live }) {
                 </div>
                 <div style={{ fontFamily: serif, fontSize: 26, ...press }}>JazakAllah Khair</div>
                 <div style={{ fontSize: 13, color: t.sub, margin: "6px 0 16px" }}>Your reply has been sent to the hosts.</div>
-                {EVENTS_.map((e) => (
-                  <div key={e.id} style={{ display: "flex", justifyContent: "space-between", borderBottom: `1px solid ${t.gold}33`, padding: "9px 4px", fontSize: 14 }}>
-                    <span style={{ fontFamily: serif, fontSize: 17 }}>{e.label}</span>
-                    <span style={{ color: rsvp[e.id] ? t.ink : t.sub }}>{rsvp[e.id] ? `${rsvp[e.id]} attending` : "Not attending"}</span>
-                  </div>
-                ))}
+                {EVENTS_.map((e) => {
+                  const gCal = buildGoogleCalendarLink(e, `${NAME1} & ${NAME2}`);
+                  const oCal = buildOutlookLink(e, `${NAME1} & ${NAME2}`);
+                  return (
+                    <div key={e.id} style={{ borderBottom: `1px solid ${t.gold}33`, padding: "9px 4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                        <span style={{ fontFamily: serif, fontSize: 17 }}>{e.label}</span>
+                        <span style={{ color: rsvp[e.id] ? t.ink : t.sub }}>{rsvp[e.id] ? `${rsvp[e.id]} attending` : "Not attending"}</span>
+                      </div>
+                      {(gCal || oCal) && (
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: 14, marginTop: 4 }}>
+                          {gCal && (
+                            <a href={gCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.sub, textDecoration: "underline" }}>
+                              + Google
+                            </a>
+                          )}
+                          {oCal && (
+                            <a href={oCal} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: t.sub, textDecoration: "underline" }}>
+                              + Outlook
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {dietary && <div style={{ fontSize: 13, color: t.sub, marginTop: 12 }}>Dietary: {dietary}</div>}
-                <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 20 }}>
-                  Add all events to calendar
+                <div style={{ ...caps(10, t.sub), marginTop: 20 }}>Or add every event at once</div>
+                <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 8 }}>
+                  Download for Apple Calendar / Outlook app
                 </button>
                 <button onClick={() => setSubmitted(false)} style={{ marginTop: 10, background: "transparent", border: "none", color: t.sub, fontSize: 13, textDecoration: "underline" }}>
                   Change my answer
