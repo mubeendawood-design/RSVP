@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { buildICS, icsFilename, parseEventDateTime, formatICSLocal, pad2, ICS_EVENT_DURATION_HOURS } from "../lib/ics";
 
 // ---------------- Demo data ----------------
 const HOUSEHOLD = { name: "The Khan Family", invited: 6 };
@@ -177,76 +178,11 @@ function Seal({ t, label, onClick, size = 92, initials = "A·H" }) {
 }
 
 // ---------------- ICS calendar export ----------------
-// Events are stored as display strings only (dateNum '11', month 'SEP',
-// year '2026', time '6:00 PM') — there's no raw timestamp column in the
-// schema. We parse those strings back into wall-clock components and write
-// them straight into the .ics text with an explicit TZID, rather than going
-// through a real JS Date/toISOString. That means the file always reflects
-// the venue's actual UK clock time, regardless of what timezone the guest's
-// own phone or browser happens to be set to.
-const ICS_MONTH_INDEX = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-const ICS_EVENT_DURATION_HOURS = 3; // no end-time field yet — reasonable default for a wedding function
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
-
-// Turns { dateNum, month, year, time } into a neutral Date object used only
-// as a calendar/clock calculator (for adding hours, handling month/day
-// rollover) — never treated as a real UTC instant.
-function parseEventDateTime(e) {
-  const day = parseInt(e?.dateNum, 10);
-  const month = ICS_MONTH_INDEX[String(e?.month || "").toUpperCase()];
-  const year = parseInt(e?.year, 10);
-  if (!day || month === undefined || !year) return null;
-
-  let hour = 0, minute = 0;
-  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(e?.time || "").trim());
-  if (m) {
-    hour = parseInt(m[1], 10) % 12;
-    minute = parseInt(m[2], 10);
-    if (/pm/i.test(m[3])) hour += 12;
-  }
-  return new Date(Date.UTC(year, month, day, hour, minute));
-}
-
-function formatICSLocal(d) {
-  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}00`;
-}
-
-function formatICSStamp(d) {
-  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}${pad2(d.getUTCSeconds())}Z`;
-}
-
-function icsEscape(str) {
-  return String(str || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
-}
-
-function buildICS(events, coupleLabel, token) {
-  const stamp = formatICSStamp(new Date());
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Haanji//Wedding Invite//EN", "CALSCALE:GREGORIAN"];
-
-  events.forEach((e) => {
-    const start = parseEventDateTime(e);
-    if (!start) return; // skip events we can't confidently place on a calendar
-    const end = new Date(start.getTime() + ICS_EVENT_DURATION_HOURS * 60 * 60 * 1000);
-
-    lines.push(
-      "BEGIN:VEVENT",
-      `UID:${e.id || e.label}-${token || "guest"}@haanji.app`,
-      `DTSTAMP:${stamp}`,
-      `DTSTART;TZID=Europe/London:${formatICSLocal(start)}`,
-      `DTEND;TZID=Europe/London:${formatICSLocal(end)}`,
-      `SUMMARY:${icsEscape(`${coupleLabel} — ${e.label}`)}`
-    );
-    if (e.venue) lines.push(`LOCATION:${icsEscape(e.venue)}`);
-    if (e.maps) lines.push(`DESCRIPTION:${icsEscape(e.maps)}`);
-    lines.push("END:VEVENT");
-  });
-
-  lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
-}
+// The builder itself now lives in lib/ics.js, shared with the server route
+// at /api/calendar/[token] — the route is the real guest path (proper
+// text/calendar URL, native calendar handoff); the client-side builder here
+// is kept only for demo mode, where there's no token in the database for
+// the route to look up.
 
 // Google and Outlook only accept one event per link (no multi-VEVENT
 // support like a .ics file has), so these are built per-event and shown
@@ -303,7 +239,7 @@ function downloadICS(events, coupleLabel, token) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${(coupleLabel || "wedding").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.ics`;
+  a.download = icsFilename(coupleLabel);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -311,21 +247,27 @@ function downloadICS(events, coupleLabel, token) {
 }
 
 // ---------------- Smart one-button "Add to my calendar" ----------------
-// .ics on every platform, no exceptions. Previously tried an Android
-// intent:// shortcut here to jump straight into the Google Calendar app,
-// but it isn't reliable from inside WhatsApp's in-app browser — the handoff
-// often fails and drops the guest onto the Google Calendar *website* in a
-// fresh, logged-out context, which is exactly the "please log in to Gmail"
-// friction we're trying to avoid. .ics never touches a website, so there's
-// nothing to log into: iOS opens the native Calendar add-sheet directly,
-// Android hands it to whichever calendar app is installed (already signed
-// in), desktop imports into Apple Calendar / Outlook. Slightly less "magic"
-// than jumping straight into an app, but it's the one path that never shows
-// a login screen.
-function addToCalendar(events, coupleLabel, token) {
+// Live invites navigate to /api/calendar/[token] — a real URL served with
+// the text/calendar content type. That network-level MIME type is what lets
+// phones hand the file straight to the native calendar app's Add screen
+// (no downloads folder, no login, and it works from inside WhatsApp's
+// in-app browser), instead of the browser treating it as a generic file
+// like the old client-built blob did. The route also filters to only the
+// events this household RSVP'd attending. Demo mode has no DB token for
+// the route to look up, so it keeps the client-side blob path.
+//
+// (An Android intent:// jump into the Google Calendar app was tried before
+// this — unreliable inside WhatsApp's webview: when the handoff failed it
+// landed guests on the Google Calendar website logged out, prompting the
+// exact Gmail login friction this replaces.)
+function addToCalendar(events, coupleLabel, token, isLive) {
   const validEvents = events.filter((e) => parseEventDateTime(e));
   if (!validEvents.length) {
     alert("Event dates aren't confirmed yet — check back closer to the day.");
+    return;
+  }
+  if (isLive && token) {
+    window.location.href = `/api/calendar/${encodeURIComponent(token)}`;
     return;
   }
   downloadICS(validEvents, coupleLabel, token);
@@ -435,6 +377,20 @@ export default function GuestInvite({ token, live }) {
         throw new Error("One or more RSVPs failed to save");
       }
       setSubmitted(true);
+      // Frictionless calendar: the moment the RSVP is saved with at least
+      // one person attending anything, fire the calendar handoff
+      // automatically — no button hunt. The route serves only the events
+      // they said yes to (the DB writes above completed before this runs),
+      // and the phone shows its native "Add" sheet. The button on the
+      // confirmation screen stays as a backup if they dismiss it. Short
+      // delay so the confirmation screen paints first — the guest should
+      // see "you're confirmed" before the calendar sheet slides over it.
+      const anyAttending = EVENTS_.some((e) => (rsvp[e.id] ?? 0) > 0);
+      if (anyAttending && EVENTS_.some((e) => parseEventDateTime(e))) {
+        setTimeout(() => {
+          window.location.href = `/api/calendar/${encodeURIComponent(token)}`;
+        }, 900);
+      }
     } catch (err) {
       setSaveError("Couldn't save your RSVP — please try again.");
     } finally {
@@ -760,7 +716,7 @@ export default function GuestInvite({ token, live }) {
                   </div>
                 ))}
                 {dietary && <div style={{ fontSize: 13, color: t.sub, marginTop: 12 }}>Dietary: {dietary}</div>}
-                <button onClick={() => addToCalendar(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ ...inkBtn(true), marginTop: 20 }}>
+                <button onClick={() => addToCalendar(EVENTS_, `${NAME1} & ${NAME2}`, token, !!live)} style={{ ...inkBtn(true), marginTop: 20 }}>
                   Add to my calendar
                 </button>
                 <button onClick={() => setShowCalOptions((v) => !v)} style={{ marginTop: 10, background: "transparent", border: "none", color: t.sub, fontSize: 12, textDecoration: "underline", cursor: "pointer" }}>
@@ -790,7 +746,7 @@ export default function GuestInvite({ token, live }) {
                         </div>
                       );
                     })}
-                    <button onClick={() => downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token)} style={{ marginTop: 8, background: "transparent", border: "none", color: t.sub, fontSize: 12, textDecoration: "underline", cursor: "pointer", padding: "4px" }}>
+                    <button onClick={() => (live && token ? (window.location.href = `/api/calendar/${encodeURIComponent(token)}?all=1`) : downloadICS(EVENTS_, `${NAME1} & ${NAME2}`, token))} style={{ marginTop: 8, background: "transparent", border: "none", color: t.sub, fontSize: 12, textDecoration: "underline", cursor: "pointer", padding: "4px" }}>
                       Download calendar file (.ics) — all events
                     </button>
                   </div>
