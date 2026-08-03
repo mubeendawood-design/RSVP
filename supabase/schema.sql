@@ -90,7 +90,7 @@ begin
   end if;
 
   select jsonb_build_object(
-    'household', jsonb_build_object('name', h.name, 'invited', h.invited_count),
+    'household', jsonb_build_object('name', hh.name, 'invited', hh.invited_count),
     'theme_key', w.theme_key,
     'events', coalesce(jsonb_agg(
       jsonb_build_object(
@@ -113,13 +113,13 @@ begin
     ) filter (where e.id is not null), '[]'::jsonb)
   )
   into result
-  from households h
-  join weddings w on w.id = h.wedding_id
-  join household_events he on he.household_id = h.id
+  from households hh
+  join weddings w on w.id = hh.wedding_id
+  join household_events he on he.household_id = hh.id
   join events e on e.id = he.event_id
-  left join rsvps r on r.household_id = h.id and r.event_id = e.id
-  where h.token = p_token
-  group by w.theme_key;
+  left join rsvps r on r.household_id = hh.id and r.event_id = e.id
+  where hh.token = p_token
+  group by w.theme_key, hh.name, hh.invited_count;
 
   return result;
 end;
