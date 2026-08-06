@@ -161,7 +161,7 @@ export default function ContactImport({ onAdd, onClose }) {
         rows={5}
         value={text}
         onChange={(e) => onText(e.target.value)}
-        placeholder={"Fat Bob  07911 123456\nSarah (Bob's wife)  07822 445566\nZainab Khan  07533 221144"}
+        placeholder={"Paste names and numbers here — one guest per line"}
         style={{ ...input, fontFamily: "ui-monospace, monospace", fontSize: 13, resize: "vertical" }}
       />
 
