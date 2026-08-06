@@ -64,9 +64,14 @@ export default async function WeddingDetail({ params }) {
       <Link href="/host" style={{ color: "#77705F", fontSize: 13, textDecoration: "none" }}>← All weddings</Link>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
         <h1 style={h1}>{wedding.couple_name}</h1>
-        <Link href={`/host/${weddingId}/seating`} style={{ fontSize: 14, color: "#FBF7EE", background: "#3B3527", border: "1px solid #3B3527", borderRadius: 8, padding: "8px 16px", textDecoration: "none" }}>
-          Seating planner →
-        </Link>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href={`/host/${weddingId}/invitations`} style={{ fontSize: 14, color: "#3B3527", background: "#FBF8F0", border: "1px solid #C9C2AC", borderRadius: 8, padding: "8px 16px", textDecoration: "none" }}>
+            Send invitations →
+          </Link>
+          <Link href={`/host/${weddingId}/seating`} style={{ fontSize: 14, color: "#FBF7EE", background: "#3B3527", border: "1px solid #3B3527", borderRadius: 8, padding: "8px 16px", textDecoration: "none" }}>
+            Seating planner →
+          </Link>
+        </div>
       </div>
 
       {/* ---- Per-event RSVP tracker ---- */}
