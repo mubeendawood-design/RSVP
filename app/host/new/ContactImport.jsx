@@ -129,7 +129,7 @@ export default function ContactImport({ onAdd, onClose }) {
 
   function addAll() {
     const rows = entries
-      .map((e) => ({ name: (e.invite || "").trim(), phone: (e.members[e.primary] || e.members[0]).num }))
+      .map((e) => ({ name: (e.invite || "").trim(), phone: (e.members[e.primary] || e.members[0]).num, count: e.members.length }))
       .filter((r) => r.name);
     if (rows.length) onAdd(rows);
     onClose?.();

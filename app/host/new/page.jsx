@@ -5,8 +5,8 @@ import ContactImport from "./ContactImport";
 
 const makeId = () => Math.random().toString(36).slice(2, 9);
 const emptyEvent = () => ({ id: makeId(), label: "", date: "", time: "", venue: "", dress: "", parking: "" });
-const emptyHousehold = () => ({ id: makeId(), name: "", phone: "", side: "", eventCounts: {} }); // eventCounts: { [eventId]: number }
-const DEFAULT_COUNT = 4;
+const emptyHousehold = () => ({ id: makeId(), name: "", phone: "", side: "", eventCounts: {}, defaultCount: 1 }); // eventCounts: { [eventId]: number }
+const DEFAULT_COUNT = 1;
 
 const DAY_NAMES = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -46,7 +46,7 @@ export default function HostNewPage() {
   function addImported(rows) {
     setHouseholds((hs) => {
       const base = hs.length === 1 && !hs[0].name.trim() && !hs[0].phone.trim() ? [] : hs;
-      const added = rows.map((r) => ({ ...emptyHousehold(), name: r.name, phone: r.phone || "" }));
+      const added = rows.map((r) => ({ ...emptyHousehold(), name: r.name, phone: r.phone || "", defaultCount: r.count || 1 }));
       return [...base, ...added];
     });
   }
@@ -92,7 +92,7 @@ export default function HostNewPage() {
               name: h.name,
               phone: h.phone,
               side: h.side || null,
-              eventCounts: labeledEvents.map((e) => h.eventCounts[e.id] ?? DEFAULT_COUNT),
+              eventCounts: labeledEvents.map((e) => h.eventCounts[e.id] ?? h.defaultCount ?? DEFAULT_COUNT),
             })),
         }),
       });
@@ -226,12 +226,12 @@ export default function HostNewPage() {
                     <input
                       type="number" min={0}
                       style={{ ...input, width: 80 }}
-                      value={h.eventCounts[e.id] ?? DEFAULT_COUNT}
+                      value={h.eventCounts[e.id] ?? h.defaultCount ?? DEFAULT_COUNT}
                       onChange={(x) => updateHouseholdCount(i, e.id, Math.max(0, parseInt(x.target.value) || 0))}
                     />
                   </div>
                 ))}
-                <div style={{ fontSize: 12, color: "#77705F", marginTop: 6 }}>0 = not invited to that event.</div>
+                <div style={{ fontSize: 12, color: "#77705F", marginTop: 6 }}>Starts at the household size (1, or 2 for a merged couple). Bump it up for bigger families. 0 = not invited to that event.</div>
               </>
             ) : (
               <div style={{ fontSize: 13, color: "#77705F", marginTop: 10 }}>Add an event above to set headcounts.</div>
