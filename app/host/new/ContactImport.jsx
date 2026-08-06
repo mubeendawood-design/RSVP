@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // Bulk guest-list import. Host pastes names + numbers (or, later, uses the
 // Android phone picker which feeds the same list); we parse, let them fix the
@@ -33,12 +33,45 @@ export default function ContactImport({ onAdd, onClose }) {
   const [text, setText] = useState("");
   const [entries, setEntries] = useState([]);
   const [selected, setSelected] = useState({});
+  const [pickerSupported, setPickerSupported] = useState(false);
+  const [pickError, setPickError] = useState(null);
+
+  // The Contact Picker API is Android-web only (Chrome/Edge). Feature-detect on
+  // the client so the button only shows where it actually works; paste covers
+  // everyone else (iOS, desktop).
+  useEffect(() => {
+    setPickerSupported(
+      typeof navigator !== "undefined" && "contacts" in navigator && typeof window !== "undefined" && "ContactsManager" in window
+    );
+  }, []);
 
   const onText = (v) => {
     setText(v);
     setEntries(parseLines(v));
     setSelected({});
   };
+
+  // Open the phone's own contact picker, then feed the chosen contacts through
+  // the same paste pipeline (append as lines) so rename + merge work identically
+  // whichever way contacts came in.
+  async function pickFromPhone() {
+    setPickError(null);
+    try {
+      const contacts = await navigator.contacts.select(["name", "tel"], { multiple: true });
+      const lines = (contacts || [])
+        .map((c) => {
+          const nm = Array.isArray(c.name) ? (c.name[0] || "") : (c.name || "");
+          const tel = Array.isArray(c.tel) ? (c.tel[0] || "") : (c.tel || "");
+          return `${nm}  ${tel}`.trim();
+        })
+        .filter(Boolean);
+      if (!lines.length) return;
+      onText((text ? text.trimEnd() + "\n" : "") + lines.join("\n"));
+    } catch (e) {
+      // User cancelled, or the browser blocked it — leave paste available.
+      if (e && e.name !== "AbortError") setPickError("Couldn’t open contacts — paste the list instead.");
+    }
+  }
 
   const contactCount = useMemo(() => entries.reduce((n, e) => n + e.members.length, 0), [entries]);
 
@@ -109,8 +142,20 @@ export default function ContactImport({ onAdd, onClose }) {
         <button onClick={onClose} style={xBtn} aria-label="Close import">×</button>
       </div>
       <p style={hintP}>
-        Paste names and numbers — one per line, any format. Your phone-book name stays for reference; set what you want on the invite. Merge a couple into one invite so nobody’s invited twice.
+        Your phone-book name stays for reference; set what you want on the invite. Merge a couple into one invite so nobody’s invited twice.
       </p>
+
+      {pickerSupported && (
+        <>
+          <button onClick={pickFromPhone} style={pickBtn}>
+            📱 Pick from phone contacts
+          </button>
+          <div style={{ fontSize: 12, color: "#A39C88", margin: "6px 0 10px" }}>
+            Choose guests from your phone — names and numbers come straight in. Or paste a list below.
+          </div>
+        </>
+      )}
+      {pickError && <div style={{ color: "#B0402C", fontSize: 13, marginBottom: 8 }}>{pickError}</div>}
 
       <textarea
         rows={5}
@@ -210,6 +255,7 @@ const miniLbl = { fontSize: 11, color: "#A39C88", textTransform: "uppercase", le
 const memRow = { fontSize: 12, color: "#5C563F", display: "flex", alignItems: "center", gap: 8, marginTop: 4 };
 const suggestBtn = { display: "block", width: "100%", textAlign: "left", background: "#EAF1FB", color: "#1F4E8A", border: "1px solid #C7DBF2", borderRadius: 8, padding: "8px 12px", fontSize: 13, cursor: "pointer", marginBottom: 6 };
 const addBtn = { padding: "10px 18px", borderRadius: 6, border: "1px solid #33302A", background: "#33302A", color: "#FBF7EE", fontSize: 14, cursor: "pointer" };
+const pickBtn = { width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid #1FAF57", background: "#1FAF57", color: "#fff", fontSize: 15, fontWeight: 600, cursor: "pointer" };
 const ghostBtn = { padding: "8px 14px", borderRadius: 6, border: "1px solid #C9C2AC", background: "#fff", color: "#33302A", fontSize: 13, cursor: "pointer" };
 const linkBtn = { marginTop: 8, background: "none", border: "none", color: "#3B5D8A", fontSize: 12, cursor: "pointer", padding: 0 };
 const xBtn = { border: "none", background: "none", fontSize: 20, color: "#A39C88", cursor: "pointer", lineHeight: 1 };
