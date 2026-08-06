@@ -7,7 +7,9 @@ export function middleware(req) {
   if (EXEMPT.includes(pathname)) return NextResponse.next();
 
   const isApi = pathname.startsWith("/api/host");
-  const expected = process.env.HOST_PASSWORD;
+  // Trim to match the login route — the cookie is set to this exact value,
+  // so a stray newline/space in the env var must be stripped on both sides.
+  const expected = process.env.HOST_PASSWORD?.trim();
 
   // Fail closed: if no password is configured, block the host area entirely
   // rather than leave it open.

@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   const { password } = await req.json();
-  const expected = process.env.HOST_PASSWORD;
+  // Trim both sides: pasting the value into Vercel commonly leaves a trailing
+  // newline/space, which would make every correct password fail to match.
+  const expected = process.env.HOST_PASSWORD?.trim();
 
-  if (!expected || password !== expected) {
+  if (!expected || (password ?? "").trim() !== expected) {
     return NextResponse.json({ error: "Wrong password." }, { status: 401 });
   }
 
