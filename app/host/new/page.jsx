@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ContactImport from "./ContactImport";
 
 const makeId = () => Math.random().toString(36).slice(2, 9);
 const emptyEvent = () => ({ id: makeId(), label: "", date: "", time: "", venue: "", dress: "", parking: "" });
@@ -38,6 +39,17 @@ export default function HostNewPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [showImport, setShowImport] = useState(false);
+
+  // Append imported rows ({name, phone}) as households. If the list is still a
+  // single blank starter row, replace it rather than leaving an empty entry.
+  function addImported(rows) {
+    setHouseholds((hs) => {
+      const base = hs.length === 1 && !hs[0].name.trim() && !hs[0].phone.trim() ? [] : hs;
+      const added = rows.map((r) => ({ ...emptyHousehold(), name: r.name, phone: r.phone || "" }));
+      return [...base, ...added];
+    });
+  }
 
   const updateEvent = (i, field, value) =>
     setEvents((ev) => ev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
@@ -178,7 +190,15 @@ export default function HostNewPage() {
       ))}
       <button style={ghostBtn} onClick={() => setEvents((ev) => [...ev, emptyEvent()])}>+ Add event</button>
 
-      <h2 style={{ fontSize: 16, marginTop: 24 }}>Households</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 24, flexWrap: "wrap", gap: 8 }}>
+        <h2 style={{ fontSize: 16, margin: 0 }}>Households</h2>
+        {!showImport && (
+          <button style={{ ...ghostBtn, fontSize: 13, padding: "8px 14px" }} onClick={() => setShowImport(true)}>
+            ⬇ Import from contacts
+          </button>
+        )}
+      </div>
+      {showImport && <ContactImport onAdd={addImported} onClose={() => setShowImport(false)} />}
       {households.map((h, i) => {
         const labeledEvents = events.filter((e) => e.label.trim());
         return (
